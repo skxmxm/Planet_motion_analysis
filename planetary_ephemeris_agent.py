@@ -275,21 +275,23 @@ class PlanetaryEphemerisAgent:
         
         # 提取精度要求
         precision = 1e-6  # 默认精度
-        precision_match = re.search(r'精度.*?([\d.]+)\s*\*?\s*\^?\s*(-?\d+)', query)
+        
+        # 首先匹配 "10^-8" 格式（最常用）
+        precision_match = re.search(r'10\^\s*\(?\s*(-?\d+)\s*\)?', query)
         if precision_match:
-            base = float(precision_match.group(1))
-            exp = int(precision_match.group(2))
-            precision = base * (10 ** exp)
+            precision = 10 ** int(precision_match.group(1))
         else:
-            # 匹配 "10^-6" 格式
-            precision_match = re.search(r'10\^\s*\(?\s*(-?\d+)\s*\)?', query)
+            # 匹配 "1e-8" 格式
+            precision_match = re.search(r'([\d.]+)e([+-]?\d+)', query)
             if precision_match:
-                precision = 10 ** int(precision_match.group(1))
+                precision = float(precision_match.group(0))
             else:
-                # 匹配 "1e-6" 格式
-                precision_match = re.search(r'([\d.]+)e\s*([+-]?\d+)', query)
+                # 匹配 "精度小于 0.00000001" 这样的小数格式
+                precision_match = re.search(r'精度.*?([\d.]+)\s*\*?\s*\^?\s*(-?\d+)', query)
                 if precision_match:
-                    precision = float(precision_match.group(0))
+                    base = float(precision_match.group(1))
+                    exp = int(precision_match.group(2))
+                    precision = base * (10 ** exp)
         
         return QueryRequest(
             planet=planet,
