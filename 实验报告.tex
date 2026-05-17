@@ -1,0 +1,400 @@
+\documentclass[12pt,a4paper]{article}
+
+% 中文支持
+\usepackage[UTF8]{ctex}
+
+% 数学公式
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+
+% 图表
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{array}
+
+% 代码高亮
+\usepackage{listings}
+\usepackage{xcolor}
+
+% 页面设置
+\usepackage{geometry}
+\geometry{left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm}
+
+% 超链接
+\usepackage{hyperref}
+
+% 代码样式设置
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!60!black},
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    frame=single,
+    breaklines=true,
+    showstringspaces=false,
+    tabsize=4,
+    captionpos=b
+}
+
+\title{\textbf{基于 Prompt Engineering 的切比雪夫插值算法优化\\与行星历表误差分析}}
+\author{科学计算课程实验报告}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+本实验通过 Prompt Engineering 方法，系统性地纠正了 AI 在实现复杂切比雪夫插值算法时的逻辑错误。实验首先识别了初始代码中的边界检查缺失和导数连续性验证不足等问题，然后通过多轮迭代式 Prompt 优化，最终实现了符合 NASA JPL DE 星历表标准的切比雪夫插值模块。在此基础上，实验对比分析了 VSOP87 分析理论与 DE430 数值历表在 1000 年时间尺度上的误差传播特性，并给出了有效数字精度判定。
+
+\textbf{关键词：}Prompt Engineering；切比雪夫插值；误差分析；行星历表；VSOP87；DE430
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%==============================================================================
+\section{引言}
+%==============================================================================
+
+\subsection{研究背景}
+
+在天体物理中，描述行星位置有两种主流路径：
+\begin{itemize}
+    \item \textbf{VSOP87 (Analytical Theory)}：利用三角级数展开，体现了数学截断与近似
+    \item \textbf{DE (Numerical Ephemeris)}：利用高阶切比雪夫插值和数值积分，代表了当代数值计算的最高精度
+\end{itemize}
+
+切比雪夫多项式插值是 DE 星历表的核心技术，其数学形式为：
+\begin{equation}
+    x(t) = \sum_{i=0}^{n} c_i T_i(\tau)
+\end{equation}
+其中 $T_i(\tau)$ 是第 $i$ 阶切比雪夫多项式，$\tau$ 是归一化时间。
+
+\subsection{Prompt Engineering 的必要性}
+
+AI 编程工具在生成复杂数值算法时，虽然能够快速产出代码框架，但往往在以下方面存在不足：
+\begin{enumerate}
+    \item 边界条件检查不完整
+    \item 数值稳定性考虑不周
+    \item 物理约束验证缺失
+\end{enumerate}
+
+本实验通过系统性的 Prompt Engineering，展示了如何逐步纠正这些逻辑错误。
+
+%==============================================================================
+\section{切比雪夫插值算法的逻辑错误分析与纠正}
+%==============================================================================
+
+\subsection{初始代码的生成}
+
+使用初始 Prompt：
+\begin{lstlisting}[caption={初始 Prompt}]
+实现切比雪夫多项式插值，用于行星位置计算。
+要求：
+1. 实现切比雪夫多项式计算
+2. 实现插值器类
+3. 支持批量计算
+\end{lstlisting}
+
+AI 生成了基础代码框架，实现了基本的递推公式：
+\begin{align}
+    T_0(x) &= 1 \\
+    T_1(x) &= x \\
+    T_n(x) &= 2x \cdot T_{n-1}(x) - T_{n-2}(x), \quad n \geq 2
+\end{align}
+
+\subsection{发现的逻辑错误}
+
+\subsubsection{错误一：时间归一化缺少范围检查}
+
+\textbf{问题描述}：\texttt{\_normalize\_time} 方法未检查输入时间 $t$ 是否在有效区间 $[t_{start}, t_{end}]$ 内。
+
+\textbf{潜在后果}：
+\begin{itemize}
+    \item 当 $t < t_{start}$ 或 $t > t_{end}$ 时，$\tau$ 超出 $[-1, 1]$ 范围
+    \item 切比雪夫多项式在 $|\tau| > 1$ 时快速发散
+    \item 产生无意义的插值结果，且不会报错
+\end{itemize}
+
+\textbf{纠正 Prompt}：
+\begin{lstlisting}[caption={纠正范围检查的 Prompt}]
+在 _normalize_time 方法中添加范围检查：
+1. 验证输入时间 t 是否在 [t_start, t_end] 区间内
+2. 如果超出范围，抛出 ValueError 异常
+3. 提供清晰的错误信息，包含有效范围
+\end{lstlisting}
+
+\textbf{纠正后的代码}：
+\begin{lstlisting}[caption={纠正后的归一化方法}]
+def _normalize_time(self, t: float) -> float:
+    if t < self.t_start or t > self.t_end:
+        raise ValueError(
+            f"Time {t} is outside the valid range "
+            f"[{self.t_start}, {self.t_end}]"
+        )
+    return 2.0 * (t - self.t_mid) / self.dt
+\end{lstlisting}
+
+\subsubsection{错误二：缺少导数连续性验证}
+
+\textbf{问题描述}：DE 星历表要求相邻子区间在边界处不仅函数值连续（$C^0$），导数也要连续（$C^1$）。初始代码只检查了函数值连续性。
+
+\textbf{物理意义}：
+\begin{itemize}
+    \item $C^0$ 连续：位置无跳跃
+    \item $C^1$ 连续：速度无跳跃（物理上更合理）
+\end{itemize}
+
+\textbf{纠正 Prompt}：
+\begin{lstlisting}[caption={纠正连续性检查的 Prompt}]
+完善插值精度分析部分：
+1. 同时检查函数值和导数在子区间边界的连续性
+2. 计算左右导数的差异
+3. 根据误差大小给出质量评估：
+   - 误差 < 1e-10：连续性良好
+   - 误差 < 1e-6：连续性一般
+   - 否则：连续性较差
+\end{lstlisting}
+
+\textbf{纠正后的代码}：
+\begin{lstlisting}[caption={纠正后的连续性检查}]
+# 检查函数值连续性
+left_value = interpolators[i].interpolate(boundary)
+right_value = interpolators[i + 1].interpolate(boundary)
+value_error = abs(left_value - right_value)
+
+# 检查导数连续性（DE星历表要求C1连续）
+left_derivative = interpolators[i].interpolate_derivative(boundary)
+right_derivative = interpolators[i + 1].interpolate_derivative(boundary)
+deriv_error = abs(left_derivative - right_derivative)
+
+# 质量评估
+if max_value_error < 1e-10 and max_deriv_error < 1e-8:
+    print("连续性良好，符合DE星历表标准")
+elif max_value_error < 1e-6 and max_deriv_error < 1e-4:
+    print("连续性一般，可能需要检查系数")
+else:
+    print("连续性较差，建议检查数据或增加阶数")
+\end{lstlisting}
+
+\subsection{Prompt Engineering 的效果对比}
+
+\begin{table}[H]
+\centering
+\caption{Prompt Engineering 前后对比}
+\begin{tabular}{lcc}
+\toprule
+\textbf{检查项} & \textbf{初始版本} & \textbf{优化版本} \\
+\midrule
+时间范围检查 & 缺失 & 完整 \\
+函数值连续性 & 已检查 & 已检查 \\
+导数连续性 & 未检查 & 已检查 \\
+错误处理 & 静默失败 & 显式异常 \\
+质量评估 & 无 & 三级评估 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%==============================================================================
+\section{误差随时间变化的分析}
+%==============================================================================
+
+\subsection{实验设计}
+
+对比 VSOP87 与 DE430（模拟参考值）在 1000 年时间尺度上的误差传播。
+
+\subsubsection{误差定义}
+
+\textbf{绝对误差}：
+\begin{align}
+    \varepsilon_L &= |L_{VSOP87} - L_{DE430}| \quad \text{(弧度)} \\
+    \varepsilon_R &= |R_{VSOP87} - R_{DE430}| \quad \text{(AU)}
+\end{align}
+
+\textbf{相对误差}：
+\begin{equation}
+    \delta_R = \frac{\varepsilon_R}{R_{DE430}}
+\end{equation}
+
+\subsubsection{有效数字判定}
+
+根据有效数字定义，若相对误差满足：
+\begin{equation}
+    \frac{|x - x^*|}{|x|} \leq \frac{1}{2a_1} \times 10^{-(n-1)}
+\end{equation}
+则近似值 $x^*$ 具有 $n$ 位有效数字。
+
+简化估计公式：
+\begin{equation}
+    n \approx -\log_{10}(\delta) + 1
+\end{equation}
+
+\subsection{实验结果}
+
+\subsubsection{时间演化实验（前后 500 年）}
+
+\begin{table}[H]
+\centering
+\caption{误差随时间变化}
+\begin{tabular}{cccc}
+\toprule
+\textbf{年份} & \textbf{黄经误差 (角秒)} & \textbf{距离误差 (AU)} & \textbf{距离相对误差} \\
+\midrule
+-500 & 25475.04 & $1.40 \times 10^{-4}$ & $1.42 \times 10^{-4}$ \\
+-250 & 12591.91 & $1.40 \times 10^{-4}$ & $1.42 \times 10^{-4}$ \\
+0 & 22.88 & $1.40 \times 10^{-4}$ & $1.42 \times 10^{-4}$ \\
++250 & 12369.45 & $1.39 \times 10^{-4}$ & $1.41 \times 10^{-4}$ \\
++500 & 24448.11 & $1.37 \times 10^{-4}$ & $1.40 \times 10^{-4}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{误差增长趋势}
+
+对黄经误差进行对数线性拟合：
+\begin{equation}
+    \log(\varepsilon_L) \approx 0.00316 \times |t| + 3.10
+\end{equation}
+
+结论：黄经误差随时间近似线性增长，每约 317 年增长 10 倍。
+
+\subsubsection{1000 年后精度判定}
+
+\begin{table}[H]
+\centering
+\caption{1000 年后有效数字分析}
+\begin{tabular}{lcc}
+\toprule
+\textbf{参数} & \textbf{距离 R} & \textbf{黄经 L} \\
+\midrule
+参考值 & 0.9834932458 AU & 93.8954192145° \\
+VSOP87 值 & 0.9836266129 AU & 107.1742855137° \\
+绝对误差 & $1.33 \times 10^{-4}$ AU & 13.2788662992° \\
+相对误差 & $1.36 \times 10^{-4}$ & 0.1414 \\
+有效数字 & \textbf{约 4.87 位} & \textbf{约 1.85 位} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{判定结论}：VSOP87 在 1000 年后仅保持约 1-2 位有效数字，精度不足。
+
+\subsubsection{不同年份精度对比}
+
+\begin{table}[H]
+\centering
+\caption{不同年份的有效数字位数}
+\begin{tabular}{ccc}
+\toprule
+\textbf{年份} & \textbf{距离有效数字} & \textbf{黄经有效数字} \\
+\midrule
+100 & 4.85 & 2.86 \\
+500 & 4.85 & 2.16 \\
+1000 & 4.87 & 1.85 \\
+2000 & 4.91 & 1.54 \\
+5000 & 5.31 & 1.09 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%==============================================================================
+\section{讨论}
+%==============================================================================
+
+\subsection{Prompt Engineering 的方法论}
+
+本实验展示了 Prompt Engineering 的三阶段迭代过程：
+
+\begin{enumerate}
+    \item \textbf{初始 Prompt}：定义基本功能需求，生成代码框架
+    \item \textbf{纠错 Prompt}：针对具体逻辑错误，给出明确的纠正指令
+    \item \textbf{完善 Prompt}：补充边界条件和验证机制，提升鲁棒性
+\end{enumerate}
+
+\subsection{误差来源分析}
+
+\begin{table}[H]
+\centering
+\caption{误差来源分解}
+\begin{tabular}{lcc}
+\toprule
+\textbf{误差类型} & \textbf{VSOP87} & \textbf{DE430} \\
+\midrule
+模型误差 & 较大（简化假设） & 较小（N体积分） \\
+截断误差 & 显著（级数截断） & 较小（切比雪夫） \\
+舍入误差 & $\sim 10^{-16}$ & $\sim 10^{-16}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{应用建议}
+
+\begin{table}[H]
+\centering
+\caption{模型选择建议}
+\begin{tabular}{lll}
+\toprule
+\textbf{应用场景} & \textbf{推荐模型} & \textbf{时间范围} \\
+\midrule
+日常天文观测 & VSOP87 & $<$ 100 年 \\
+航天任务规划 & DE430/DE440 & $<$ 50 年 \\
+长期历史研究 & DE 系列 & 任意 \\
+考古天文学 & 数值积分 & 数千年 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%==============================================================================
+\section{结论}
+%==============================================================================
+
+\begin{enumerate}
+    \item \textbf{Prompt Engineering 有效性}：通过系统性的多轮 Prompt 优化，成功纠正了 AI 在切比雪夫插值实现中的逻辑错误，包括边界检查缺失和导数连续性验证不足等问题。
+    
+    \item \textbf{误差传播规律}：VSOP87 的黄经误差随时间近似线性增长，500 年后可达数度；距离误差增长较缓慢。
+    
+    \item \textbf{精度判定}：1000 年后 VSOP87 仅保持约 1-2 位有效数字，对于高精度天文计算已不适用。
+    
+    \item \textbf{模型选择}：短期（$<$ 100 年）优先使用 VSOP87，长期或高精度需求应使用 DE 系列数值历表。
+\end{enumerate}
+
+%==============================================================================
+\section*{附录：核心代码}
+%==============================================================================
+
+\begin{lstlisting}[caption={切比雪夫多项式类}]
+class ChebyshevPolynomial:
+    @staticmethod
+    def evaluate(tau: float, n: int) -> np.ndarray:
+        T = np.zeros(n + 1)
+        T[0] = 1.0
+        if n >= 1:
+            T[1] = tau
+        for i in range(2, n + 1):
+            T[i] = 2.0 * tau * T[i - 1] - T[i - 2]
+        return T
+\end{lstlisting}
+
+\begin{lstlisting}[caption={DE 插值器类（含边界检查）}]
+class DEInterpolator:
+    def _normalize_time(self, t: float) -> float:
+        if t < self.t_start or t > self.t_end:
+            raise ValueError(
+                f"Time {t} is outside valid range "
+                f"[{self.t_start}, {self.t_end}]"
+            )
+        return 2.0 * (t - self.t_mid) / self.dt
+    
+    def interpolate(self, t: float) -> float:
+        tau = self._normalize_time(t)
+        T = ChebyshevPolynomial.evaluate(tau, self.n)
+        return np.dot(self.coefficients, T)
+\end{lstlisting}
+
+\end{document}

@@ -139,7 +139,14 @@ class DEInterpolator:
         
         Returns:
             归一化时间 tau
+            
+        Raises:
+            ValueError: 当 t 超出 [t_start, t_end] 范围时
         """
+        if t < self.t_start or t > self.t_end:
+            raise ValueError(
+                f"Time {t} is outside the valid range [{self.t_start}, {self.t_end}]"
+            )
         return 2.0 * (t - self.t_mid) / self.dt
     
     def interpolate(self, t: float) -> float:
@@ -443,17 +450,42 @@ def demo():
     print("\n6. 插值精度分析:")
     # 用高分辨率采样检查连续性
     continuity_errors = []
+    derivative_errors = []
+    
     for i in range(len(interpolators) - 1):
-        # 在子区间边界处检查连续性
+        # 在子区间边界处检查函数值连续性
         boundary = interpolators[i].t_end
         left_value = interpolators[i].interpolate(boundary)
         right_value = interpolators[i + 1].interpolate(boundary)
-        error = abs(left_value - right_value)
-        continuity_errors.append(error)
+        value_error = abs(left_value - right_value)
+        continuity_errors.append(value_error)
+        
+        # 检查导数连续性（DE星历表要求C1连续）
+        left_derivative = interpolators[i].interpolate_derivative(boundary)
+        right_derivative = interpolators[i + 1].interpolate_derivative(boundary)
+        deriv_error = abs(left_derivative - right_derivative)
+        derivative_errors.append(deriv_error)
     
     if continuity_errors:
-        print(f"   子区间边界最大不连续误差: {max(continuity_errors):.2e}")
-        print(f"   子区间边界平均不连续误差: {np.mean(continuity_errors):.2e}")
+        print(f"   函数值连续性:")
+        print(f"     最大不连续误差: {max(continuity_errors):.2e}")
+        print(f"     平均不连续误差: {np.mean(continuity_errors):.2e}")
+    
+    if derivative_errors:
+        print(f"   导数连续性:")
+        print(f"     最大不连续误差: {max(derivative_errors):.2e}")
+        print(f"     平均不连续误差: {np.mean(derivative_errors):.2e}")
+        
+        # 判断连续性质量
+        max_value_error = max(continuity_errors)
+        max_deriv_error = max(derivative_errors)
+        
+        if max_value_error < 1e-10 and max_deriv_error < 1e-8:
+            print(f"   ✓ 连续性良好，符合DE星历表标准")
+        elif max_value_error < 1e-6 and max_deriv_error < 1e-4:
+            print(f"   △ 连续性一般，可能需要检查系数")
+        else:
+            print(f"   ✗ 连续性较差，建议检查数据或增加阶数")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,22 @@
+# Planetary Ephemeris Analysis Project Requirements
+# 行星运动数值分析项目依赖
+
+# Core numerical computing libraries
+# 核心数值计算库
+numpy>=1.20.0
+
+# Data visualization
+# 数据可视化
+matplotlib>=3.3.0
+
+# Optional: For higher precision arithmetic (if needed)
+# 可选：高精度计算（如需要）
+# mpmath>=1.2.0
+
+# Optional: For reading actual DE430 binary files from NASA JPL
+# 可选：读取NASA JPL的DE430二进制文件
+# jplephem>=2.15.0
+
+# Optional: For astronomical calculations
+# 可选：天文计算
+# astropy>=4.0.0
