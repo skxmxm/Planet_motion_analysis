@@ -338,7 +338,7 @@ class VSOP87Earth:
             
             # 距离
             var_name = f'R{i}'
-            if var_name in self.var_arrays[var_name]:
+            if var_name in self.var_arrays:
                 terms = self.var_arrays[var_name]
                 phases = terms[:, 1:2]
                 freqs = terms[:, 2:3]
